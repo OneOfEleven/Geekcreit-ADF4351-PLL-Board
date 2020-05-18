@@ -47,7 +47,6 @@ typedef struct
 		uint8_t  aux_output_power;                         // 0 = disable output, 1 = -4dBm, 2 = -1dBm, 3 = +2dBm, 4 = +5dBm
 		bool     aux_output_select;                        // false = divided output, true = fundamental
 		bool     mute_till_lock_enable;                    // false = output enabled when VCO unlocked, true = output disabled when VCO unlocked
-		bool     as_near_as_possible;								// true = adjust values to get as near as possible to the desired output frequency
 
 		//SPI_HandleTypeDef *spi_port;
 
@@ -77,8 +76,12 @@ typedef struct
 	uint16_t int_div;
 	uint16_t mod;
 	uint8_t  band_sel_div;
+	uint32_t band_select_Hz;
 	uint8_t  output_divider;
 	uint16_t phase_value;
+	uint16_t min_mod;
+	uint32_t min_int_div;
+	//float min_step_Hz;
 
 	// the ADF4351 internal register values
 	uint32_t regs[6];

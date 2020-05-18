@@ -15,6 +15,7 @@
 #define ADF4351_BANDSEL_LOW_MAX_HZ		125000
 
 #define ADF4351_MODULUS_MAX            4095
+#define ADF4351_MODULUS_MIN            2
 
 #define ADF4351_FRAC_MAX               4095
 
@@ -259,15 +260,19 @@ uint64_t adf4351_set_freq(t_adf4351_dev *dev, uint64_t freq_Hz, bool force)
 		return 0;
 
 	dev->frequency_Hz       = 0;
-	dev->vco_Hz             = 0;
 	dev->channel_spacing_Hz = dev->params.channel_spacing_Hz;
 	dev->r_counter          = dev->params.reference_div_factor;
+	dev->vco_Hz             = 0;
+	dev->output_divider     = 0;
 	dev->pfd_freq_Hz        = 0;
 	dev->frac_div           = 0;
 	dev->int_div            = 0;
 	dev->mod                = 0;
 	dev->band_sel_div       = 0;
-	dev->output_divider     = 0;
+	dev->band_select_Hz     = 0;
+	dev->min_mod            = (dev->params.low_spur_mode_enable) ? 50 : ADF4351_MODULUS_MIN;
+	dev->min_int_div        = (freq_Hz > ADF4351_45_PRESCALER_MAX_HZ) ? 75 : 23;
+	//dev->min_step_Hz        = 0;
 
 	if (freq_Hz == 0)
 	{
@@ -277,14 +282,14 @@ uint64_t adf4351_set_freq(t_adf4351_dev *dev, uint64_t freq_Hz, bool force)
 
 	if (freq_Hz < ADF4351_OUT_MIN_HZ || freq_Hz > ADF4351_OUT_MAX_HZ)
 	{
-		adf4351_set_regs(dev, false, true);
-		return 0;
+		//adf4351_set_regs(dev, false, true);
+		//return 0;
 	}
 
 	if (dev->params.reference_freq_Hz < ADF4351_REFIN_MIN_HZ || dev->params.reference_freq_Hz > ADF4351_REFIN_MAX_HZ)
 	{
-		adf4351_set_regs(dev, false, true);
-		return 0;
+		//adf4351_set_regs(dev, false, true);
+		//return 0;
 	}
 
 	if (dev->params.reference_div_factor < ADF4351_R_COUNTER_MIN || dev->params.reference_div_factor > ADF4351_R_COUNTER_MAX)
@@ -302,43 +307,36 @@ uint64_t adf4351_set_freq(t_adf4351_dev *dev, uint64_t freq_Hz, bool force)
 	const uint8_t ref_mul = dev->params.reference_mul2_enable ? 2 : 1;
 	const uint8_t ref_div = dev->params.reference_div2_enable ? 2 : 1;
 
-	const uint32_t min_int_div = (freq_Hz > ADF4351_45_PRESCALER_MAX_HZ) ? 75 : 23;
-
 	dev->vco_Hz = freq_Hz;
 	while (dev->vco_Hz < ADF4351_VCO_MIN_HZ)
 	{
 		dev->vco_Hz <<= 1;
 		if (++dev->output_divider > ADF4351_OUT_DIV_MAX)
 		{
-			dev->output_divider = 0;
-			dev->vco_Hz = 0;
 			adf4351_set_regs(dev, false, true);
 			return 0;
 		}
 	}
 
-	if (!dev->params.as_near_as_possible)
+	dev->pfd_freq_Hz = (dev->params.reference_freq_Hz * ref_mul) / (dev->params.reference_div_factor * ref_div);
+	if (dev->pfd_freq_Hz > ADF4351_PFD_FRAC_MAX_HZ)
 	{
-		dev->pfd_freq_Hz = (dev->params.reference_freq_Hz * ref_mul) / (dev->params.reference_div_factor * ref_div);
-		if (dev->pfd_freq_Hz > ADF4351_PFD_FRAC_MAX_HZ)
-		{
-			dev->pfd_freq_Hz = 0;
-			adf4351_set_regs(dev, false, true);
-			return 0;
-		}
-
-		dev->mod = dev->pfd_freq_Hz / dev->params.channel_spacing_Hz;
-		if (dev->mod > ADF4351_MODULUS_MAX)
-		{
-			dev->mod = 0;
-			adf4351_set_regs(dev, false, true);
-			return 0;
-		}
-
-		dev->int_div  =   dev->vco_Hz             / dev->pfd_freq_Hz;
-		dev->frac_div = ((dev->vco_Hz * dev->mod) / dev->pfd_freq_Hz) - ((uint32_t)dev->int_div * dev->mod);
+		//adf4351_set_regs(dev, false, true);
+		//return 0;
 	}
-	else
+
+	dev->mod = dev->pfd_freq_Hz / dev->params.channel_spacing_Hz;
+	if (dev->mod < ADF4351_MODULUS_MIN || dev->mod > ADF4351_MODULUS_MAX)
+	{
+		adf4351_set_regs(dev, false, true);
+		return 0;
+	}
+
+	//dev->min_step_Hz = (1.0f / (dev->mod * (1u << dev->output_divider))) * dev->pfd_freq_Hz;
+
+	dev->int_div  =   dev->vco_Hz             / dev->pfd_freq_Hz;
+	dev->frac_div = ((dev->vco_Hz * dev->mod) / dev->pfd_freq_Hz) - ((uint32_t)dev->int_div * dev->mod);
+/*
 	{
 		const uint32_t ref_in       = dev->params.reference_freq_Hz;
 		uint16_t mod                = 0;
@@ -371,7 +369,7 @@ uint64_t adf4351_set_freq(t_adf4351_dev *dev, uint64_t freq_Hz, bool force)
 			dev->r_counter          = r_counter;
 			dev->channel_spacing_Hz = channel_spacing_Hz;
 
-		} while (dev->int_div < min_int_div);
+		} while (dev->int_div < dev->min_int_div);
 
 		if (dev->mod == 0)
 		{
@@ -382,7 +380,7 @@ uint64_t adf4351_set_freq(t_adf4351_dev *dev, uint64_t freq_Hz, bool force)
 			return 0;
 		}
 	}
-
+*/
 	// GCD (Greatest Common Divisor)
 	if (dev->params.gcd_enable && dev->frac_div > 0 && dev->mod > 0)
 	{
@@ -403,18 +401,18 @@ uint64_t adf4351_set_freq(t_adf4351_dev *dev, uint64_t freq_Hz, bool force)
 		}
 	}
 
-	if (dev->params.low_spur_mode_enable && dev->mod > 0)
-	{	// MOD must be >= 50 for low spur mode
-		while (dev->mod < 50 && (dev->frac_div << 1) <= ADF4351_FRAC_MAX)
+	if (dev->mod > 0)
+	{
+		while (dev->mod < dev->min_mod && (dev->frac_div << 1) <= ADF4351_FRAC_MAX)
 		{
 			dev->frac_div <<= 1;
 			dev->mod      <<= 1;
 		}
 	}
 
-	const uint32_t band_select_max_Hz = (dev->params.band_select_clock_mode_high_enable) ? ADF4351_BANDSEL_HIGH_MAX_HZ : ADF4351_BANDSEL_LOW_MAX_HZ;
-	dev->band_sel_div = dev->pfd_freq_Hz / band_select_max_Hz;
-	if ((dev->pfd_freq_Hz % band_select_max_Hz) > (band_select_max_Hz / 2))
+	dev->band_select_Hz = (dev->params.band_select_clock_mode_high_enable) ? ADF4351_BANDSEL_HIGH_MAX_HZ : ADF4351_BANDSEL_LOW_MAX_HZ;
+	dev->band_sel_div = dev->pfd_freq_Hz / dev->band_select_Hz;
+	if ((dev->pfd_freq_Hz % dev->band_select_Hz) > (dev->band_select_Hz / 2))
 		dev->band_sel_div++;
 
 	dev->frequency_Hz = adf4351_get_freq(dev);
@@ -550,7 +548,7 @@ void adf4351_init_defaults(t_adf4351_dev *dev)
 		return;
 
 	dev->params.reference_freq_Hz                       = 25000000;               // reference input frequency
-	dev->params.channel_spacing_Hz                      = 25000;                  // desired channel spacing
+	dev->params.channel_spacing_Hz                      = 3125;                   // desired channel spacing
 	dev->params.frequency_Hz                            = 0;                      // desired output frequency
 	dev->params.reference_div_factor                    = 1;                      // reference input clock divider
 	dev->params.reference_mul2_enable                   = false;                  // disable reference input multiple-by-2
@@ -572,5 +570,4 @@ void adf4351_init_defaults(t_adf4351_dev *dev)
 	dev->params.output_power                            = 4;                      // main output +5dBm
 	dev->params.aux_output_power                        = 0;                      // disable AUX output
 	dev->params.aux_output_select                       = true;							// AUX output VCO fundamental
-	dev->params.as_near_as_possible                     = false;                  // compute values to get as close as possible to the desired frequency
 }

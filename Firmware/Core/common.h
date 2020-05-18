@@ -43,7 +43,7 @@
 #define BUTTON_DEBOUNCE_MS       30		// 1 to 255
 #define BUTTON_DEBOUNCE_LONG_MS  500	// 2 to 65535
 
-#define EEPROM_MAGIC             0x12345678
+#define EEPROM_MAGIC             0xADF4351A
 
 #define SERIAL_BAUDRATE          115200
 //#define SERIAL_BAUDRATE        230400
@@ -135,19 +135,20 @@
 #pragma pack(push, 1)
 	typedef struct t_eeprom
 	{
-		uint32_t magic;                  // used to mark the start of a valid block in emulated eeprom (CPU flash)
-		uint64_t scan_step_freq;         // Hz
-		uint64_t start_freq;             // Hz
-		uint64_t end_freq;               // Hz
-		uint64_t frequency;              // Hz
-		uint32_t ref_freq;               // Hz
-		uint32_t channel_spacing_freq;   // Hz
-		uint16_t scan_timer_ms;          // >= 1
-		uint8_t  dB_index;               // 2 to 5
-		uint8_t  mode;                   // '0' = spot frequency, '1' = sweep, '2' = hop
-		uint8_t  ref_freq_table_index;   // >= 0
-		uint8_t  padding[1];             // make it a multiple of 32-bit words in size
-		uint16_t crc;                    // must be the last variable in the block
+		uint32_t magic;                           // used to mark the start of a valid block in emulated eeprom (CPU flash)
+		uint64_t scan_step_freq;                  // Hz
+		uint64_t start_freq;                      // Hz
+		uint64_t end_freq;                        // Hz
+		uint64_t frequency;                       // Hz
+		uint32_t ref_freq;                        // Hz
+		uint32_t channel_spacing_freq;            // Hz
+		uint16_t scan_timer_ms;                   // >= 1
+		uint8_t  dB_index;                        // 2 to 5
+		uint8_t  mode;                            // '0' = spot frequency, '1' = sweep, '2' = hop
+		uint8_t  ref_freq_table_index;            // >= 0
+		uint8_t  charge_pump_current_table_index; // 0 to 15
+		//uint8_t  padding[2];                      // make it a multiple of 32-bit words in size
+		uint16_t crc;                             // must be the last variable in the block
 	} t_eeprom;
 #pragma pack(pop)
 

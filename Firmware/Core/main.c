@@ -31,18 +31,20 @@
 #define TASK_REF_FREQ                    6
 #define TASK_REF_FREQ_ADJUST             7
 #define TASK_CHAN_SPACE                  8
-#define TASK_MAIN_MENU                   9
+#define TASK_CHG_PUMP_CUR                9
+#define TASK_MAIN_MENU                  10
 
-#define TASK_FREQ_LOOP                  10
-#define TASK_SWEEP_FREQ_LOOP            11
-#define TASK_HOP_FREQ_LOOP              12
-#define TASK_SCAN_STEP_FREQ_LOOP        13
-#define TASK_SCAN_SPEED_LOOP            14
-#define TASK_OUTPUT_POWER_LOOP          15
-#define TASK_REF_FREQ_LOOP              16
-#define TASK_REF_FREQ_ADJUST_LOOP       17
-#define TASK_CHAN_SPACE_LOOP            18
-#define TASK_MAIN_MENU_LOOP             19
+#define TASK_FREQ_LOOP                  20
+#define TASK_SWEEP_FREQ_LOOP            21
+#define TASK_HOP_FREQ_LOOP              22
+#define TASK_SCAN_STEP_FREQ_LOOP        23
+#define TASK_SCAN_SPEED_LOOP            24
+#define TASK_OUTPUT_POWER_LOOP          25
+#define TASK_REF_FREQ_LOOP              26
+#define TASK_REF_FREQ_ADJUST_LOOP       27
+#define TASK_CHAN_SPACE_LOOP            28
+#define TASK_CHG_PUMP_CUR_LOOP          29
+#define TASK_MAIN_MENU_LOOP             30
 
 #define CHAR_WIDTH                  8
 #define LEADING_ZERO_CHAR           '_'
@@ -145,6 +147,9 @@ const t_ref_freq ref_freq_table[] =
 		{240000000, false, 12, true},
 		{250000000, false, 25, false}
 };
+
+// uA
+const uint16_t charge_pump_current_table[] = {310, 630, 940, 1250, 1560, 1880, 2190, 2500, 2810, 3130, 3440, 3750, 4060, 4380, 4690, 5000};
 
 #ifdef USE_USB_VCP
 	uint8_t *usb_tx_buf    = nullptr;                  //
@@ -905,8 +910,8 @@ void eeprom_save(void)
 	}
 
 	eeprom.magic      = EEPROM_MAGIC;
-	eeprom.padding[0] = 0xff;
-	eeprom.padding[1] = 0xff;
+	//eeprom.padding[0] = 0xff;
+	//eeprom.padding[1] = 0xff;
 	eeprom.crc        = 0;
 	//eeprom.crc      = updateCRC16(0xffff, &eeprom, sizeof(eeprom) - sizeof(eeprom.crc));    // TODO: crc
 	eeprom.crc        = 0xffff;
@@ -1021,6 +1026,17 @@ void copy_time_buf_2_display(uint8_t source[], char dis[], uint8_t dis_point)
 	dis[6] = '\0';
 
 	dis[dis_point] += 128;
+}
+
+void copy_current_buf_2_display(uint8_t source[], char dis[])
+{
+	dis[0] = source[0] + '0';
+	dis[1] = '.';
+	dis[2] = source[1] + '0';
+	dis[3] = source[2] + '0';
+	dis[4] = 'm';
+	dis[5] = 'A';
+	dis[6] = '\0';
 }
 
 void show_menu_frequency(void)
@@ -1149,6 +1165,14 @@ void lcd_show_menu(uint8_t start_info, uint8_t current_deal_info)
 			if (y_start >= max_lines * 2)
 				break;
 
+		case TASK_CHG_PUMP_CUR:
+		case TASK_CHG_PUMP_CUR_LOOP:
+			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
+			LCD_Show_ModeCEStr(0, y_start, "Charge Pump I  ", show_mode);
+			y_start += 2;
+			if (y_start >= max_lines * 2)
+				break;
+
 		default:
 			break;
 	}
@@ -1212,6 +1236,7 @@ void main_menu(void)
 					case TASK_REF_FREQ:
 					case TASK_REF_FREQ_ADJUST:
 					case TASK_CHAN_SPACE:
+					case TASK_CHG_PUMP_CUR:
 						task_id = task_index;
 						break;
 					default:
@@ -2238,6 +2263,76 @@ void channel_spacing_set(void)
 	}
 }
 
+void charge_pump_current_set(void)
+{
+	uint8_t index = eeprom.charge_pump_current_table_index;
+	bool but_pressed = false;
+	uint8_t buf[4];
+	char display[7];
+
+	uint_to_buf(charge_pump_current_table[index], buf, sizeof(buf));
+
+	if (task_id == TASK_CHG_PUMP_CUR)
+	{
+		task_id = TASK_CHG_PUMP_CUR_LOOP;
+		OLED_Clear();
+		LCD_Show_CEStr(0, 0, "Charge Pump I");
+		copy_current_buf_2_display(buf, display);
+		OLED_ShowString(CHAR_WIDTH * 3, 3, display);
+		lcd_show_mode();
+	}
+
+	if (ok_button.released)
+	{
+		eeprom_save();
+		process_but_releases();
+		task_id = TASK_MAIN_MENU;
+		return;
+	}
+
+	if (up_button.released)
+	{
+		but_pressed = true;
+		if (index < ARRAY_SIZE(charge_pump_current_table) - 1)
+			index++;
+	}
+	else
+	if (down_button.released)
+	{
+		but_pressed = true;
+		if (index > 0)
+			index--;
+	}
+
+	if (but_pressed)
+	{
+		const uint16_t uA = charge_pump_current_table[index];
+
+		eeprom.charge_pump_current_table_index = index;
+
+		adf4351_dev.params.charge_pump_current = index;
+
+		switch (eeprom.mode)
+		{
+			default:
+			case FREQ_MODE_SPOT:
+				adf4351_set_freq(&adf4351_dev, eeprom.frequency, false);
+				break;
+			case FREQ_MODE_SWEEP:
+			case FREQ_MODE_HOP:
+				adf4351_set_freq(&adf4351_dev, sweep_hop_freq, false);
+				break;
+		}
+
+		uint_to_buf(uA, buf, sizeof(buf));
+
+		copy_current_buf_2_display(buf, display);
+		OLED_ShowString(CHAR_WIDTH * 3, 3, display);
+
+		process_but_releases();
+	}
+}
+
 // *********************************************************************
 
 void process_rx_serial(t_rx_buffer *uart_rx)
@@ -2336,16 +2431,17 @@ int main(void)
 
 	// default settings
 	memset(&eeprom, 0xff, sizeof(eeprom));
-	eeprom.scan_timer_ms        = 1;               //
-	eeprom.scan_step_freq       = 12500;           //
-	eeprom.start_freq           = 144000000;       //
-	eeprom.end_freq             = 146000000;       //
-	eeprom.frequency            = 145000000;       //
-	eeprom.channel_spacing_freq = 2500;            //
-	eeprom.dB_index             = 3;               // 0 == off, 1 == -4dB, 2 = -1dB, 3 = +2dB, 4 = +5dB
-	eeprom.mode                 = FREQ_MODE_SPOT;  //
-	eeprom.ref_freq_table_index = 19;              // 100 MHz
-	eeprom.ref_freq             = ref_freq_table[eeprom.ref_freq_table_index].freq_in_Hz;
+	eeprom.scan_timer_ms                   = 1;               //
+	eeprom.scan_step_freq                  = 12500;           //
+	eeprom.start_freq                      = 144000000;       //
+	eeprom.end_freq                        = 146000000;       //
+	eeprom.frequency                       = 145000000;       //
+	eeprom.channel_spacing_freq            = 3125;            //
+	eeprom.dB_index                        = 3;               // 0 == off, 1 == -4dB, 2 = -1dB, 3 = +2dB, 4 = +5dB
+	eeprom.mode                            = FREQ_MODE_SPOT;  //
+	eeprom.ref_freq_table_index            = 19;              // 100 MHz
+	eeprom.ref_freq                        = ref_freq_table[eeprom.ref_freq_table_index].freq_in_Hz;
+	eeprom.charge_pump_current_table_index = 7;               // 2.5mA
 
 	#ifdef USE_USB_VCP
 		memset(&usb_rx, 0, sizeof(usb_rx));
@@ -2442,6 +2538,7 @@ int main(void)
 		//adf4351_dev.params.gcd_enable          = false;
 		adf4351_dev.params.mute_till_lock_enable = true;
 		adf4351_dev.params.output_power          = eeprom.dB_index;
+		adf4351_dev.params.charge_pump_current   = eeprom.charge_pump_current_table_index;
 
 		adf4351_init(&adf4351_dev);
 	}
@@ -2524,6 +2621,10 @@ int main(void)
 			case TASK_CHAN_SPACE:
 			case TASK_CHAN_SPACE_LOOP:
 				channel_spacing_set();
+				break;
+			case TASK_CHG_PUMP_CUR:
+			case TASK_CHG_PUMP_CUR_LOOP:
+				charge_pump_current_set();
 				break;
 			default: task_id = TASK_MAIN_MENU;
 			case TASK_MAIN_MENU:
