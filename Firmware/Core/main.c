@@ -45,8 +45,9 @@
 #define TASK_CHAN_SPACE                  8
 #define TASK_CHG_PUMP_CUR                9
 #define TASK_UNLOCK_MUTE                10
-#define TASK_GCD                        11
-#define TASK_MAIN_MENU                  12
+#define TASK_BAND_SELECT_CLOCK          11
+#define TASK_GCD                        12
+#define TASK_MAIN_MENU                  13
 
 // *********************************************************************
 
@@ -2142,7 +2143,68 @@ void unlock_mute_set(void)
 		{
 			eeprom.unlock_mute = unlock_mute;
 			adf4351_dev.params.mute_till_lock_enable = unlock_mute;
+
 			LCD_Show_CEStr(CHAR_WIDTH * 3, 3, (eeprom.unlock_mute) ? " YES " : " no ");
+
+			switch (eeprom.mode)
+			{
+				default:
+				case FREQ_MODE_SPOT:
+					adf4351_set_freq(&adf4351_dev, eeprom.frequency, false);
+					break;
+				case FREQ_MODE_SWEEP:
+				case FREQ_MODE_HOP:
+					adf4351_set_freq(&adf4351_dev, sweep_hop_freq, false);
+					break;
+			}
+		}
+
+		process_but_releases();
+	}
+}
+
+void band_select_clock_set(void)
+{
+	bool but_pressed = false;
+	bool high        = eeprom.band_select_clock_high;
+
+	if (task_id != TASK_BAND_SELECT_CLOCK)
+	{
+		task_id = TASK_BAND_SELECT_CLOCK;
+		OLED_Clear();
+		LCD_Show_CEStr(0, 0, "Band Select Clk");
+		LCD_Show_CEStr(CHAR_WIDTH * 3, 3, (high) ? " HIGH " : " low ");
+		lcd_show_mode();
+	}
+
+	if (ok_button.released)
+	{
+		eeprom_save();
+		process_but_releases();
+		task_id = TASK_NONE;
+		return;
+	}
+
+	if (up_button.released)
+	{
+		but_pressed = true;
+		high        = true;
+	}
+	else
+	if (down_button.released)
+	{
+		but_pressed = true;
+		high        = false;
+	}
+
+	if (but_pressed)
+	{
+		if (eeprom.band_select_clock_high != high)
+		{
+			eeprom.band_select_clock_high = high;
+			adf4351_dev.params.band_select_clock_mode_high_enable = high;
+
+			LCD_Show_CEStr(CHAR_WIDTH * 3, 3, (high) ? " HIGH " : " low ");
 
 			switch (eeprom.mode)
 			{
@@ -2308,6 +2370,13 @@ void lcd_show_menu(uint8_t start_info, uint8_t current_deal_info)
 			if (y_start >= max_lines * 2)
 				break;
 
+		case TASK_BAND_SELECT_CLOCK:
+			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
+			LCD_Show_ModeCEStr(0, y_start, "Band Select Clk", show_mode);
+			y_start += 2;
+			if (y_start >= max_lines * 2)
+				break;
+
 		case TASK_GCD:
 			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
 			LCD_Show_ModeCEStr(0, y_start, "GCD            ", show_mode);
@@ -2333,21 +2402,22 @@ void menu_process(int new_menu)
 
 	switch (menu_id)
 	{
-		case TASK_FREQ:            freq_set();                break;
-		case TASK_SWEEP_FREQ:      sweep_freq_set();          break;
-		case TASK_HOP_FREQ:        hop_freq_set();            break;
-		case TASK_SCAN_STEP_FREQ:  scan_step_freq_set();      break;
-		case TASK_SCAN_SPEED:      scan_speed_set();          break;
-		case TASK_OUTPUT_POWER:    output_power_set();        break;
-		case TASK_REF_FREQ:        ref_freq_set();            break;
-		case TASK_REF_FREQ_ADJUST: ref_freq_adjust_set();     break;
-		case TASK_CHAN_SPACE:      channel_spacing_set();     break;
-		case TASK_CHG_PUMP_CUR:    charge_pump_current_set(); break;
-		case TASK_UNLOCK_MUTE:     unlock_mute_set();         break;
-		case TASK_GCD:             gcd_set();                 break;
-		default:                   task_id = TASK_NONE;
+		case TASK_FREQ:              freq_set();                break;
+		case TASK_SWEEP_FREQ:        sweep_freq_set();          break;
+		case TASK_HOP_FREQ:          hop_freq_set();            break;
+		case TASK_SCAN_STEP_FREQ:    scan_step_freq_set();      break;
+		case TASK_SCAN_SPEED:        scan_speed_set();          break;
+		case TASK_OUTPUT_POWER:      output_power_set();        break;
+		case TASK_REF_FREQ:          ref_freq_set();            break;
+		case TASK_REF_FREQ_ADJUST:   ref_freq_adjust_set();     break;
+		case TASK_CHAN_SPACE:        channel_spacing_set();     break;
+		case TASK_CHG_PUMP_CUR:      charge_pump_current_set(); break;
+		case TASK_UNLOCK_MUTE:       unlock_mute_set();         break;
+		case TASK_BAND_SELECT_CLOCK: band_select_clock_set();   break;
+		case TASK_GCD:               gcd_set();                 break;
+		default:                     task_id = TASK_NONE;
 		case TASK_NONE:
-		case TASK_MAIN_MENU:       main_menu();               break;
+		case TASK_MAIN_MENU:         main_menu();               break;
 	}
 }
 
@@ -2416,18 +2486,20 @@ void main_menu(void)
 					process_but_releases();
 					switch (task_index)
 					{
-						case TASK_FREQ:            freq_set();                break;
-						case TASK_SWEEP_FREQ:      sweep_freq_set();          break;
-						case TASK_HOP_FREQ:        hop_freq_set();            break;
-						case TASK_SCAN_STEP_FREQ:  scan_step_freq_set();      break;
-						case TASK_SCAN_SPEED:      scan_speed_set();          break;
-						case TASK_OUTPUT_POWER:    output_power_set();        break;
-						case TASK_REF_FREQ:        ref_freq_set();            break;
-						case TASK_REF_FREQ_ADJUST: ref_freq_adjust_set();     break;
-						case TASK_CHAN_SPACE:      channel_spacing_set();     break;
-						case TASK_CHG_PUMP_CUR:    charge_pump_current_set(); break;
-						case TASK_UNLOCK_MUTE:     unlock_mute_set();         break;
-						case TASK_GCD:             gcd_set();                 break;
+						case TASK_FREQ:              freq_set();                break;
+						case TASK_SWEEP_FREQ:        sweep_freq_set();          break;
+						case TASK_HOP_FREQ:          hop_freq_set();            break;
+						case TASK_SCAN_STEP_FREQ:    scan_step_freq_set();      break;
+						case TASK_SCAN_SPEED:        scan_speed_set();          break;
+						case TASK_OUTPUT_POWER:      output_power_set();        break;
+						case TASK_REF_FREQ:          ref_freq_set();            break;
+						case TASK_REF_FREQ_ADJUST:   ref_freq_adjust_set();     break;
+						case TASK_CHAN_SPACE:        channel_spacing_set();     break;
+						case TASK_CHG_PUMP_CUR:      charge_pump_current_set(); break;
+						case TASK_UNLOCK_MUTE:       unlock_mute_set();         break;
+						case TASK_BAND_SELECT_CLOCK: band_select_clock_set();   break;
+						case TASK_GCD:               gcd_set();                 break;
+						default: break;
 					}
 					return;
 				}
@@ -2607,6 +2679,9 @@ int main(void)
 	eeprom.ref_freq_table_index            = 19;              // 100 MHz
 	eeprom.ref_freq                        = ref_freq_table[eeprom.ref_freq_table_index].freq_in_Hz;
 	eeprom.charge_pump_current_table_index = 7;               // 2.5mA
+	eeprom.unlock_mute                     = false;           //
+	eeprom.band_select_clock_high          = false;           //
+	eeprom.gcd_enable                      = false;           //
 
 	#ifdef USE_USB_VCP
 		memset(&usb_rx, 0, sizeof(usb_rx));
@@ -2694,16 +2769,17 @@ int main(void)
 		const t_ref_freq ref_freq = ref_freq_table[eeprom.ref_freq_table_index];
 
 		adf4351_init_defaults(&adf4351_dev);
-		adf4351_dev.params.reference_freq_Hz     = eeprom.ref_freq;
-		adf4351_dev.params.channel_spacing_Hz    = eeprom.channel_spacing_freq;
-		adf4351_dev.params.frequency_Hz          = eeprom.frequency;
-		adf4351_dev.params.reference_div_factor  = ref_freq.r_divider;
-		adf4351_dev.params.reference_mul2_enable = ref_freq.mul2_enable;
-		adf4351_dev.params.reference_div2_enable = ref_freq.div2_enable;
-		//adf4351_dev.params.gcd_enable          = false;
-		adf4351_dev.params.mute_till_lock_enable = true;
-		adf4351_dev.params.output_power          = eeprom.dB_index;
-		adf4351_dev.params.charge_pump_current   = eeprom.charge_pump_current_table_index;
+		adf4351_dev.params.reference_freq_Hz                  = eeprom.ref_freq;
+		adf4351_dev.params.channel_spacing_Hz                 = eeprom.channel_spacing_freq;
+		adf4351_dev.params.frequency_Hz                       = eeprom.frequency;
+		adf4351_dev.params.reference_div_factor               = ref_freq.r_divider;
+		adf4351_dev.params.reference_mul2_enable              = ref_freq.mul2_enable;
+		adf4351_dev.params.reference_div2_enable              = ref_freq.div2_enable;
+		adf4351_dev.params.gcd_enable                         = eeprom.gcd_enable;
+		adf4351_dev.params.mute_till_lock_enable              = eeprom.unlock_mute;
+		adf4351_dev.params.band_select_clock_mode_high_enable = eeprom.band_select_clock_high;
+		adf4351_dev.params.output_power                       = eeprom.dB_index;
+		adf4351_dev.params.charge_pump_current                = eeprom.charge_pump_current_table_index;
 
 		adf4351_init(&adf4351_dev);
 	}
