@@ -332,7 +332,7 @@ uint64_t adf4351_set_freq(t_adf4351_dev *dev, uint64_t freq_Hz, bool force)
 		return 0;
 	}
 
-	//dev->min_step_Hz = (1.0f / (dev->mod * (1u << dev->output_divider))) * dev->pfd_freq_Hz;
+	//	dev->min_step_Hz = (float)dev->pfd_freq_Hz / (dev->mod * (1u << dev->output_divider));
 
 	dev->int_div  =   dev->vco_Hz             / dev->pfd_freq_Hz;
 	dev->frac_div = ((dev->vco_Hz * dev->mod) / dev->pfd_freq_Hz) - ((uint32_t)dev->int_div * dev->mod);

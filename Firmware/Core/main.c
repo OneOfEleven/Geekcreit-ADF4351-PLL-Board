@@ -22,6 +22,18 @@
 #define CONNECTION_TIMEOUT_MS       20000		//
 #define UART_RX_TIMEOUT_MS          50			// UART Rx packet data timeout
 
+#define CHAR_WIDTH                  8
+#define LEADING_ZERO_CHAR           '_'
+
+#define FREQ_MODE_SPOT              0
+#define FREQ_MODE_SWEEP             1
+#define FREQ_MODE_HOP               2
+
+// *********************************************************************
+// selected menu option
+
+#define TASK_NONE                       -1
+
 #define TASK_FREQ                        0
 #define TASK_SWEEP_FREQ                  1
 #define TASK_HOP_FREQ                    2
@@ -32,26 +44,8 @@
 #define TASK_REF_FREQ_ADJUST             7
 #define TASK_CHAN_SPACE                  8
 #define TASK_CHG_PUMP_CUR                9
-#define TASK_MAIN_MENU                  10
-
-#define TASK_FREQ_LOOP                  20
-#define TASK_SWEEP_FREQ_LOOP            21
-#define TASK_HOP_FREQ_LOOP              22
-#define TASK_SCAN_STEP_FREQ_LOOP        23
-#define TASK_SCAN_SPEED_LOOP            24
-#define TASK_OUTPUT_POWER_LOOP          25
-#define TASK_REF_FREQ_LOOP              26
-#define TASK_REF_FREQ_ADJUST_LOOP       27
-#define TASK_CHAN_SPACE_LOOP            28
-#define TASK_CHG_PUMP_CUR_LOOP          29
-#define TASK_MAIN_MENU_LOOP             30
-
-#define CHAR_WIDTH                  8
-#define LEADING_ZERO_CHAR           '_'
-
-#define FREQ_MODE_SPOT              0
-#define FREQ_MODE_SWEEP             1
-#define FREQ_MODE_HOP               2
+#define TASK_UNLOCK_MUTE                10
+#define TASK_MAIN_MENU                  11
 
 // *********************************************************************
 
@@ -149,7 +143,7 @@ const t_ref_freq ref_freq_table[] =
 };
 
 // uA
-const uint16_t charge_pump_current_table[] = {310, 630, 940, 1250, 1560, 1880, 2190, 2500, 2810, 3130, 3440, 3750, 4060, 4380, 4690, 5000};
+const uint16_t charge_pump_current_table[] = {313, 625, 938, 1250, 1560, 1880, 2190, 2500, 2810, 3130, 3440, 3750, 4060, 4380, 4690, 5000};
 
 #ifdef USE_USB_VCP
 	uint8_t *usb_tx_buf    = nullptr;                  //
@@ -165,8 +159,8 @@ volatile uint16_t sweep_hop_count = 0;                // frequency step time cou
 volatile uint64_t sweep_hop_freq  = 0;                // the frequency we are currently on
 volatile bool     sweep_hop_next  = false;            // interrupt sets this to tell the EXEC when to step to the next frequency
 
-uint8_t task_index                = 0;                // current selected menu option
-uint8_t task_id                   = TASK_MAIN_MENU;   // current menu process being ran
+int task_index            = 0;                        // current selected menu option
+int task_id               = TASK_NONE;                // current menu process being ran
 
 volatile uint32_t random32;
 
@@ -1034,9 +1028,10 @@ void copy_current_buf_2_display(uint8_t source[], char dis[])
 	dis[1] = '.';
 	dis[2] = source[1] + '0';
 	dis[3] = source[2] + '0';
-	dis[4] = 'm';
-	dis[5] = 'A';
-	dis[6] = '\0';
+	dis[4] = source[3] + '0';
+	dis[5] = 'm';
+	dis[6] = 'A';
+	dis[7] = '\0';
 }
 
 void show_menu_frequency(void)
@@ -1067,7 +1062,7 @@ void lcd_show_mode(void)
 	switch (eeprom.mode)
 	{
 		case FREQ_MODE_SPOT:
-			if (task_id == TASK_MAIN_MENU || task_id == TASK_MAIN_MENU_LOOP)
+			if (task_id == TASK_MAIN_MENU)
 				show_menu_frequency();
 			break;
 		case FREQ_MODE_SWEEP:
@@ -1079,235 +1074,6 @@ void lcd_show_mode(void)
 		default:
 			LCD_Show_ModeCEStr(0, 6, "                ", 1);
 			break;
-	}
-}
-
-// display menu selection
-void lcd_show_menu(uint8_t start_info, uint8_t current_deal_info)
-{
-	const uint8_t max_lines = 3;
-	uint8_t show_mode;
-	uint16_t y_start = 0;
-
-	//OLED_Clear();
-
-	switch (start_info)
-	{
-		case TASK_FREQ:
-		case TASK_FREQ_LOOP:
-			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
-			LCD_Show_ModeCEStr(0, y_start, "Spot Frequency ", show_mode);
-			y_start += 2;
-			if (y_start >= max_lines * 2)
-				break;
-
-		case TASK_SWEEP_FREQ:
-		case TASK_SWEEP_FREQ_LOOP:
-			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
-			LCD_Show_ModeCEStr(0, y_start, "Linear Sweep   ", show_mode);
-			y_start += 2;
-			if (y_start >= max_lines * 2)
-				break;
-
-		case TASK_HOP_FREQ:
-		case TASK_HOP_FREQ_LOOP:
-			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
-			LCD_Show_ModeCEStr(0, y_start, "Random Hop     ", show_mode);
-			y_start += 2;
-			if (y_start >= max_lines * 2)
-				break;
-
-		case TASK_SCAN_STEP_FREQ:
-		case TASK_SCAN_STEP_FREQ_LOOP:
-			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
-			LCD_Show_ModeCEStr(0, y_start, "Frequency Step ", show_mode);
-			y_start += 2;
-			if (y_start >= max_lines * 2)
-				break;
-
-		case TASK_SCAN_SPEED:
-		case TASK_SCAN_SPEED_LOOP:
-			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
-			LCD_Show_ModeCEStr(0, y_start, "Scan Speed     ", show_mode);
-			y_start += 2;
-			if (y_start == max_lines * 2)
-				break;
-
-		case TASK_OUTPUT_POWER:
-		case TASK_OUTPUT_POWER_LOOP:
-			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
-			LCD_Show_ModeCEStr(0, y_start, "RF Output Power", show_mode);
-			y_start += 2;
-			if (y_start >= max_lines * 2)
-				break;
-
-		case TASK_REF_FREQ:
-		case TASK_REF_FREQ_LOOP:
-			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
-			LCD_Show_ModeCEStr(0, y_start, "Ref Freq Input ", show_mode);
-			y_start += 2;
-			if (y_start >= max_lines * 2)
-				break;
-
-		case TASK_REF_FREQ_ADJUST:
-		case TASK_REF_FREQ_ADJUST_LOOP:
-			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
-			LCD_Show_ModeCEStr(0, y_start, "Ref Freq Adjust", show_mode);
-			y_start += 2;
-			if (y_start >= max_lines * 2)
-				break;
-
-		case TASK_CHAN_SPACE:
-		case TASK_CHAN_SPACE_LOOP:
-			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
-			LCD_Show_ModeCEStr(0, y_start, "Channel spacing", show_mode);
-			y_start += 2;
-			if (y_start >= max_lines * 2)
-				break;
-
-		case TASK_CHG_PUMP_CUR:
-		case TASK_CHG_PUMP_CUR_LOOP:
-			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
-			LCD_Show_ModeCEStr(0, y_start, "Charge Pump I  ", show_mode);
-			y_start += 2;
-			if (y_start >= max_lines * 2)
-				break;
-
-		default:
-			break;
-	}
-
-	lcd_show_mode();
-}
-
-// show the main menu
-void main_menu(void)
-{
-	const uint8_t max_lines = 3;	// number of menu items to display
-	bool draw_menu = false;
-
-	if (task_id == TASK_MAIN_MENU)
-	{
-		task_id = TASK_MAIN_MENU_LOOP;
-		draw_menu = true;
-	}
-	else
-	{
-		if (ok_button.released)
-		{
-			if (ok_button.pressed_long)
-			{
-				switch (task_index)
-				{
-					case TASK_FREQ:
-						if (eeprom.mode != FREQ_MODE_SPOT)
-						{
-							eeprom.mode = FREQ_MODE_SPOT;
-							adf4351_set_freq(&adf4351_dev, eeprom.frequency, false);
-							eeprom_save();
-							lcd_show_mode();
-						}
-						break;
-					case TASK_SWEEP_FREQ:
-						if (eeprom.mode != FREQ_MODE_SWEEP)
-						{
-							sweep_hop_count = 0;
-							sweep_hop_freq  = eeprom.start_freq;
-							sweep_hop_next  = false;
-							eeprom.mode     = FREQ_MODE_SWEEP;
-							adf4351_set_freq(&adf4351_dev, sweep_hop_freq, false);
-							eeprom_save();
-							lcd_show_mode();
-						}
-						break;
-					case TASK_HOP_FREQ:
-						if (eeprom.mode != FREQ_MODE_HOP)
-						{
-							sweep_hop_count = 0;
-							sweep_hop_next  = true;
-							eeprom.mode     = FREQ_MODE_HOP;
-							eeprom_save();
-							lcd_show_mode();
-						}
-						break;
-					case TASK_SCAN_STEP_FREQ:
-					case TASK_SCAN_SPEED:
-					case TASK_OUTPUT_POWER:
-					case TASK_REF_FREQ:
-					case TASK_REF_FREQ_ADJUST:
-					case TASK_CHAN_SPACE:
-					case TASK_CHG_PUMP_CUR:
-						task_id = task_index;
-						break;
-					default:
-					case TASK_MAIN_MENU:
-						break;
-				}
-			}
-			else
-				task_id = task_index;
-			process_but_releases();
-			return;
-		}
-
-		if (left_button.released)
-		{
-			if (eeprom.mode != FREQ_MODE_SPOT)
-			{
-				eeprom.mode = FREQ_MODE_SPOT;
-			}
-			else
-			{
-				eeprom.frequency -= eeprom.scan_step_freq;
-				if (eeprom.frequency < ADF4351_OUT_MIN_HZ)
-					eeprom.frequency = ADF4351_OUT_MIN_HZ;
-				eeprom_save();
-			}
-			adf4351_set_freq(&adf4351_dev, eeprom.frequency, false);
-			process_but_releases();
-			show_menu_frequency();
-			return;
-		}
-
-		if (right_button.released)
-		{
-			if (eeprom.mode != FREQ_MODE_SPOT)
-			{
-				eeprom.mode = FREQ_MODE_SPOT;
-			}
-			else
-			{
-				eeprom.frequency += eeprom.scan_step_freq;
-				if (eeprom.frequency > ADF4351_OUT_MAX_HZ)
-					eeprom.frequency = ADF4351_OUT_MAX_HZ;
-				eeprom_save();
-			}
-			adf4351_set_freq(&adf4351_dev, eeprom.frequency, false);
-			process_but_releases();
-			show_menu_frequency();
-			return;
-		}
-
-		if (up_button.released)
-		{
-			task_index = (task_index > 0) ? task_index - 1 : TASK_MAIN_MENU - 1;
-			draw_menu = true;
-		}
-		else
-		if (down_button.released)
-		{
-			task_index = (task_index < (TASK_MAIN_MENU - 1)) ? task_index + 1 : 0;
-			draw_menu = true;
-		}
-	}
-
-	if (draw_menu)
-	{
-		process_but_releases();
-		uint8_t top_line = task_index - (max_lines - 1);
-		if (top_line >= 128)
-			top_line = 0;
-		lcd_show_menu(top_line, task_index);
 	}
 }
 
@@ -1359,9 +1125,9 @@ void freq_set(void)
 
 	uint_to_buf(eeprom.frequency, buf, sizeof(buf));
 
-	if (task_id == TASK_FREQ)
+	if (task_id != TASK_FREQ)
 	{
-		task_id = TASK_FREQ_LOOP;
+		task_id = TASK_FREQ;
 		OLED_Clear();
 		LCD_Show_CEStr(0, 0, "Spot Frequency");
 		copy_freq_buf_2_display(buf, display, p_index, LEADING_ZERO_CHAR);
@@ -1382,7 +1148,7 @@ void freq_set(void)
 		}
 		eeprom_save();
 		process_but_releases();
-		task_id = TASK_MAIN_MENU;
+		task_id = TASK_NONE;
 		return;
 	}
 
@@ -1460,9 +1226,9 @@ void sweep_freq_set(void)
 	uint_to_buf(eeprom.start_freq, &buf[              0], sizeof(buf) / 2);
 	uint_to_buf(eeprom.end_freq,   &buf[sizeof(buf) / 2], sizeof(buf) / 2);
 
-	if (task_id == TASK_SWEEP_FREQ)
+	if (task_id != TASK_SWEEP_FREQ)
 	{
-		task_id = TASK_SWEEP_FREQ_LOOP;
+		task_id = TASK_SWEEP_FREQ;
 
 		OLED_Clear();
 		LCD_Show_CEStr(0, 0, "Sweep Limits");
@@ -1487,14 +1253,12 @@ void sweep_freq_set(void)
 			return;
 		}
 
-		if (eeprom.scan_step_freq == 0 || eeprom.scan_step_freq > ((eeprom.end_freq - eeprom.start_freq) / 2))
+		if (eeprom.scan_step_freq == 0 || eeprom.scan_step_freq > (eeprom.end_freq - eeprom.start_freq))
 		{
 			OLED_ShowString(0, 6, (char *)"   step error   ");
 			process_but_releases();
 			return;
 		}
-
-		task_id = TASK_MAIN_MENU;
 
 		if (!ok_button.pressed_long)
 		{
@@ -1516,6 +1280,9 @@ void sweep_freq_set(void)
 
 		eeprom_save();
 		process_but_releases();
+
+		task_id = TASK_NONE;
+
 		return;
 	}
 
@@ -1611,9 +1378,9 @@ void hop_freq_set(void)
 	uint_to_buf(eeprom.start_freq, &buf[              0], sizeof(buf) / 2);
 	uint_to_buf(eeprom.end_freq,   &buf[sizeof(buf) / 2], sizeof(buf) / 2);
 
-	if (task_id == TASK_HOP_FREQ)
+	if (task_id != TASK_HOP_FREQ)
 	{
-		task_id = TASK_HOP_FREQ_LOOP;
+		task_id = TASK_HOP_FREQ;
 
 		OLED_Clear();
 		LCD_Show_CEStr(0, 0, "Hop Limits");
@@ -1638,14 +1405,12 @@ void hop_freq_set(void)
 			return;
 		}
 
-		if (eeprom.scan_step_freq == 0 || eeprom.scan_step_freq > ((eeprom.end_freq - eeprom.start_freq) / 2))
+		if (eeprom.scan_step_freq == 0 || eeprom.scan_step_freq > (eeprom.end_freq - eeprom.start_freq))
 		{
 			OLED_ShowString(0, 6, (char *)"   step error   ");
 			process_but_releases();
 			return;
 		}
-
-		task_id = TASK_MAIN_MENU;
 
 		if (!ok_button.pressed_long)
 		{
@@ -1667,6 +1432,9 @@ void hop_freq_set(void)
 
 		eeprom_save();
 		process_but_releases();
+
+		task_id = TASK_NONE;
+
 		return;
 	}
 
@@ -1760,9 +1528,9 @@ void scan_step_freq_set(void)
 
 	uint_to_buf(eeprom.scan_step_freq, buf, sizeof(buf));
 
-	if (task_id == TASK_SCAN_STEP_FREQ)
+	if (task_id != TASK_SCAN_STEP_FREQ)
 	{
-		task_id = TASK_SCAN_STEP_FREQ_LOOP;
+		task_id = TASK_SCAN_STEP_FREQ;
 		OLED_Clear();
 		LCD_Show_CEStr(0, 0, "Frequency Step");
 		copy_freq_buf_2_display(buf, display, p_index, LEADING_ZERO_CHAR);
@@ -1775,7 +1543,7 @@ void scan_step_freq_set(void)
 	{
 		eeprom_save();
 		process_but_releases();
-		task_id = TASK_MAIN_MENU;
+		task_id = TASK_NONE;
 		return;
 	}
 
@@ -1850,9 +1618,9 @@ void scan_speed_set(void)
 
 	uint_to_buf(eeprom.scan_timer_ms, buf, sizeof(buf));
 
-	if (task_id == TASK_SCAN_SPEED)
+	if (task_id != TASK_SCAN_SPEED)
 	{
-		task_id = TASK_SCAN_SPEED_LOOP;
+		task_id = TASK_SCAN_SPEED;
 		OLED_Clear();
 		LCD_Show_CEStr(0, 0, "Scan Speed");
 		copy_time_buf_2_display(buf, display, p_index);
@@ -1862,9 +1630,9 @@ void scan_speed_set(void)
 
 	if (ok_button.released)
 	{
-		task_id = TASK_MAIN_MENU;
 		eeprom_save();
 		process_but_releases();
+		task_id = TASK_NONE;
 		return;
 	}
 
@@ -1923,9 +1691,9 @@ void output_power_set(void)
 	uint8_t index = eeprom.dB_index;
 	bool but_pressed = false;
 
-	if (task_id == TASK_OUTPUT_POWER)
+	if (task_id != TASK_OUTPUT_POWER)
 	{
-		task_id = TASK_OUTPUT_POWER_LOOP;
+		task_id = TASK_OUTPUT_POWER;
 
 		OLED_Clear();
 		LCD_Show_CEStr(0, 0, "RF Output Power");
@@ -1945,7 +1713,7 @@ void output_power_set(void)
 	{
 		eeprom_save();
 		process_but_releases();
-		task_id = TASK_MAIN_MENU;
+		task_id = TASK_NONE;
 		return;
 	}
 
@@ -2004,9 +1772,9 @@ void ref_freq_set(void)
 
 	uint_to_buf(ref_freq_table[index].freq_in_Hz, buf, sizeof(buf));
 
-	if (task_id == TASK_REF_FREQ)
+	if (task_id != TASK_REF_FREQ)
 	{
-		task_id = TASK_REF_FREQ_LOOP;
+		task_id = TASK_REF_FREQ;
 		OLED_Clear();
 		LCD_Show_CEStr(0, 0, "Ref Freq Input");
 		copy_freq_buf_2_display(buf, display, 255, ' ');
@@ -2018,7 +1786,7 @@ void ref_freq_set(void)
 	{
 		eeprom_save();
 		process_but_releases();
-		task_id = TASK_MAIN_MENU;
+		task_id = TASK_NONE;
 		return;
 	}
 
@@ -2081,9 +1849,9 @@ void ref_freq_adjust_set(void)
 
 	uint_to_buf(eeprom.ref_freq, buf, sizeof(buf));
 
-	if (task_id == TASK_REF_FREQ_ADJUST)
+	if (task_id != TASK_REF_FREQ_ADJUST)
 	{
-		task_id = TASK_REF_FREQ_ADJUST_LOOP;
+		task_id = TASK_REF_FREQ_ADJUST;
 		OLED_Clear();
 		LCD_Show_CEStr(0, 0, "Ref Freq Adjust");
 		copy_freq_buf_2_display(buf, display, p_index, LEADING_ZERO_CHAR);
@@ -2095,7 +1863,7 @@ void ref_freq_adjust_set(void)
 	{
 		eeprom_save();
 		process_but_releases();
-		task_id = TASK_MAIN_MENU;
+		task_id = TASK_NONE;
 		return;
 	}
 
@@ -2179,9 +1947,9 @@ void channel_spacing_set(void)
 
 	uint_to_buf(eeprom.channel_spacing_freq, buf, sizeof(buf));
 
-	if (task_id == TASK_CHAN_SPACE)
+	if (task_id != TASK_CHAN_SPACE)
 	{
-		task_id = TASK_CHAN_SPACE_LOOP;
+		task_id = TASK_CHAN_SPACE;
 		OLED_Clear();
 		LCD_Show_CEStr(0, 0, "Channel Spacing");
 		copy_freq_buf_2_display(buf, display, p_index, LEADING_ZERO_CHAR);
@@ -2193,7 +1961,7 @@ void channel_spacing_set(void)
 	{
 		eeprom_save();
 		process_but_releases();
-		task_id = TASK_MAIN_MENU;
+		task_id = TASK_NONE;
 		return;
 	}
 
@@ -2267,14 +2035,14 @@ void charge_pump_current_set(void)
 {
 	uint8_t index = eeprom.charge_pump_current_table_index;
 	bool but_pressed = false;
-	uint8_t buf[4];
-	char display[7];
+	uint8_t buf[5];
+	char display[8];
 
 	uint_to_buf(charge_pump_current_table[index], buf, sizeof(buf));
 
-	if (task_id == TASK_CHG_PUMP_CUR)
+	if (task_id != TASK_CHG_PUMP_CUR)
 	{
-		task_id = TASK_CHG_PUMP_CUR_LOOP;
+		task_id = TASK_CHG_PUMP_CUR;
 		OLED_Clear();
 		LCD_Show_CEStr(0, 0, "Charge Pump I");
 		copy_current_buf_2_display(buf, display);
@@ -2286,7 +2054,7 @@ void charge_pump_current_set(void)
 	{
 		eeprom_save();
 		process_but_releases();
-		task_id = TASK_MAIN_MENU;
+		task_id = TASK_NONE;
 		return;
 	}
 
@@ -2330,6 +2098,322 @@ void charge_pump_current_set(void)
 		OLED_ShowString(CHAR_WIDTH * 3, 3, display);
 
 		process_but_releases();
+	}
+}
+
+void unlock_mute_set(void)
+{
+	bool but_pressed = false;
+	bool unlock_mute = eeprom.unlock_mute;
+
+	if (task_id != TASK_UNLOCK_MUTE)
+	{
+		task_id = TASK_UNLOCK_MUTE;
+		OLED_Clear();
+		LCD_Show_CEStr(0, 0, "Unlock Mute");
+		LCD_Show_CEStr(CHAR_WIDTH * 3, 3, (unlock_mute) ? " YES " : " no ");
+		lcd_show_mode();
+	}
+
+	if (ok_button.released)
+	{
+		eeprom_save();
+		process_but_releases();
+		task_id = TASK_NONE;
+		return;
+	}
+
+	if (up_button.released)
+	{
+		but_pressed = true;
+		unlock_mute = true;
+	}
+	else
+	if (down_button.released)
+	{
+		but_pressed = true;
+		unlock_mute = false;
+	}
+
+	if (but_pressed)
+	{
+		if (eeprom.unlock_mute != unlock_mute)
+		{
+			eeprom.unlock_mute = unlock_mute;
+			adf4351_dev.params.mute_till_lock_enable = unlock_mute;
+			LCD_Show_CEStr(CHAR_WIDTH * 3, 3, (eeprom.unlock_mute) ? " YES " : " no ");
+		}
+
+		process_but_releases();
+	}
+}
+
+// display menu selection
+void lcd_show_menu(uint8_t start_info, uint8_t current_deal_info)
+{
+	const uint8_t max_lines = 3;
+	uint8_t show_mode;
+	uint16_t y_start = 0;
+
+	//OLED_Clear();
+
+	switch (start_info)
+	{
+		case TASK_FREQ:
+			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
+			LCD_Show_ModeCEStr(0, y_start, "Spot Frequency ", show_mode);
+			y_start += 2;
+			if (y_start >= max_lines * 2)
+				break;
+
+		case TASK_SWEEP_FREQ:
+			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
+			LCD_Show_ModeCEStr(0, y_start, "Linear Sweep   ", show_mode);
+			y_start += 2;
+			if (y_start >= max_lines * 2)
+				break;
+
+		case TASK_HOP_FREQ:
+			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
+			LCD_Show_ModeCEStr(0, y_start, "Random Hop     ", show_mode);
+			y_start += 2;
+			if (y_start >= max_lines * 2)
+				break;
+
+		case TASK_SCAN_STEP_FREQ:
+			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
+			LCD_Show_ModeCEStr(0, y_start, "Frequency Step ", show_mode);
+			y_start += 2;
+			if (y_start >= max_lines * 2)
+				break;
+
+		case TASK_SCAN_SPEED:
+			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
+			LCD_Show_ModeCEStr(0, y_start, "Scan Speed     ", show_mode);
+			y_start += 2;
+			if (y_start == max_lines * 2)
+				break;
+
+		case TASK_OUTPUT_POWER:
+			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
+			LCD_Show_ModeCEStr(0, y_start, "RF Output Power", show_mode);
+			y_start += 2;
+			if (y_start >= max_lines * 2)
+				break;
+
+		case TASK_REF_FREQ:
+			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
+			LCD_Show_ModeCEStr(0, y_start, "Ref Freq Input ", show_mode);
+			y_start += 2;
+			if (y_start >= max_lines * 2)
+				break;
+
+		case TASK_REF_FREQ_ADJUST:
+			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
+			LCD_Show_ModeCEStr(0, y_start, "Ref Freq Adjust", show_mode);
+			y_start += 2;
+			if (y_start >= max_lines * 2)
+				break;
+
+		case TASK_CHAN_SPACE:
+			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
+			LCD_Show_ModeCEStr(0, y_start, "Channel spacing", show_mode);
+			y_start += 2;
+			if (y_start >= max_lines * 2)
+				break;
+
+		case TASK_CHG_PUMP_CUR:
+			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
+			LCD_Show_ModeCEStr(0, y_start, "Charge Pump I  ", show_mode);
+			y_start += 2;
+			if (y_start >= max_lines * 2)
+				break;
+
+		case TASK_UNLOCK_MUTE:
+			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
+			LCD_Show_ModeCEStr(0, y_start, "Unlock Mute    ", show_mode);
+			y_start += 2;
+			if (y_start >= max_lines * 2)
+				break;
+
+		default:
+			break;
+	}
+
+	lcd_show_mode();
+}
+
+void main_menu(void);
+
+void menu_process(int new_menu)
+{
+	int menu_id = task_id;
+
+	if (new_menu != TASK_NONE)
+		menu_id = new_menu;	// switch to the new menu option
+
+	switch (menu_id)
+	{
+		case TASK_FREQ:            freq_set();                break;
+		case TASK_SWEEP_FREQ:      sweep_freq_set();          break;
+		case TASK_HOP_FREQ:        hop_freq_set();            break;
+		case TASK_SCAN_STEP_FREQ:  scan_step_freq_set();      break;
+		case TASK_SCAN_SPEED:      scan_speed_set();          break;
+		case TASK_OUTPUT_POWER:    output_power_set();        break;
+		case TASK_REF_FREQ:        ref_freq_set();            break;
+		case TASK_REF_FREQ_ADJUST: ref_freq_adjust_set();     break;
+		case TASK_CHAN_SPACE:      channel_spacing_set();     break;
+		case TASK_CHG_PUMP_CUR:    charge_pump_current_set(); break;
+		case TASK_UNLOCK_MUTE:     unlock_mute_set();         break;
+		default:                   task_id = TASK_NONE;
+		case TASK_NONE:
+		case TASK_MAIN_MENU:       main_menu();               break;
+	}
+}
+
+// show the main menu
+void main_menu(void)
+{
+	const uint8_t max_lines = 3;	// number of menu items to display
+	bool draw_menu = false;
+
+	if (task_id != TASK_MAIN_MENU)
+	{
+		task_id = TASK_MAIN_MENU;
+		draw_menu = true;
+	}
+	else
+	{
+		if (ok_button.released)
+		{
+			if (ok_button.pressed_long)
+			{
+				switch (task_index)
+				{
+					case TASK_FREQ:
+						if (eeprom.mode != FREQ_MODE_SPOT)
+						{	// switch to spot frequency mode
+							eeprom.mode = FREQ_MODE_SPOT;
+							adf4351_set_freq(&adf4351_dev, eeprom.frequency, false);
+							eeprom_save();
+							lcd_show_mode();
+						}
+						break;
+
+					case TASK_SWEEP_FREQ:
+						if (eeprom.mode != FREQ_MODE_SWEEP)
+						{	// switch to linear sweep mode
+							sweep_hop_count = 0;
+							sweep_hop_freq  = eeprom.start_freq;
+							sweep_hop_next  = false;
+							eeprom.mode     = FREQ_MODE_SWEEP;
+							adf4351_set_freq(&adf4351_dev, sweep_hop_freq, false);
+							eeprom_save();
+							lcd_show_mode();
+						}
+						break;
+
+					case TASK_HOP_FREQ:
+						if (eeprom.mode != FREQ_MODE_HOP)
+						{	// switch to hop mode
+							sweep_hop_count = 0;
+							sweep_hop_next  = true;
+							eeprom.mode     = FREQ_MODE_HOP;
+							eeprom_save();
+							lcd_show_mode();
+						}
+						break;
+
+					default:	// do nothing
+						break;
+				}
+			}
+			else
+			{	// switch to the selected sub-menu
+
+				if (task_id != task_index)
+				{
+					process_but_releases();
+					switch (task_index)
+					{
+						case TASK_FREQ:            freq_set();                break;
+						case TASK_SWEEP_FREQ:      sweep_freq_set();          break;
+						case TASK_HOP_FREQ:        hop_freq_set();            break;
+						case TASK_SCAN_STEP_FREQ:  scan_step_freq_set();      break;
+						case TASK_SCAN_SPEED:      scan_speed_set();          break;
+						case TASK_OUTPUT_POWER:    output_power_set();        break;
+						case TASK_REF_FREQ:        ref_freq_set();            break;
+						case TASK_REF_FREQ_ADJUST: ref_freq_adjust_set();     break;
+						case TASK_CHAN_SPACE:      channel_spacing_set();     break;
+						case TASK_CHG_PUMP_CUR:    charge_pump_current_set(); break;
+						case TASK_UNLOCK_MUTE:     unlock_mute_set();         break;
+					}
+					return;
+				}
+			}
+
+			process_but_releases();
+			return;
+		}
+
+		if (left_button.released)
+		{	// step down in frequency
+			if (eeprom.mode != FREQ_MODE_SPOT)
+			{
+				eeprom.mode = FREQ_MODE_SPOT;
+			}
+			else
+			{
+				eeprom.frequency -= eeprom.scan_step_freq;
+				if (eeprom.frequency < ADF4351_OUT_MIN_HZ)
+					eeprom.frequency = ADF4351_OUT_MIN_HZ;
+				eeprom_save();
+			}
+			adf4351_set_freq(&adf4351_dev, eeprom.frequency, false);
+			process_but_releases();
+			show_menu_frequency();
+			return;
+		}
+
+		if (right_button.released)
+		{	// step up in frequency
+			if (eeprom.mode != FREQ_MODE_SPOT)
+			{
+				eeprom.mode = FREQ_MODE_SPOT;
+			}
+			else
+			{
+				eeprom.frequency += eeprom.scan_step_freq;
+				if (eeprom.frequency > ADF4351_OUT_MAX_HZ)
+					eeprom.frequency = ADF4351_OUT_MAX_HZ;
+				eeprom_save();
+			}
+			adf4351_set_freq(&adf4351_dev, eeprom.frequency, false);
+			process_but_releases();
+			show_menu_frequency();
+			return;
+		}
+
+		if (up_button.released)
+		{
+			task_index = (task_index > 0) ? task_index - 1 : TASK_MAIN_MENU - 1;
+			draw_menu = true;
+		}
+		else
+		if (down_button.released)
+		{
+			task_index = (task_index < (TASK_MAIN_MENU - 1)) ? task_index + 1 : 0;
+			draw_menu = true;
+		}
+	}
+
+	if (draw_menu)
+	{
+		process_but_releases();
+		uint8_t top_line = task_index - (max_lines - 1);
+		if (top_line >= 128)
+			top_line = 0;
+		lcd_show_menu(top_line, task_index);
 	}
 }
 
@@ -2548,7 +2632,7 @@ int main(void)
 			eeprom.start_freq >= ADF4351_OUT_MIN_HZ &&
 			eeprom.end_freq   <= ADF4351_OUT_MAX_HZ &&
 			eeprom.scan_step_freq > 0 &&
-			eeprom.scan_step_freq <= (eeprom.end_freq - eeprom.start_freq) / 2)
+			eeprom.scan_step_freq <= (eeprom.end_freq - eeprom.start_freq))
 	{	// start sweeping
 		sweep_hop_freq = eeprom.start_freq;
 		adf4351_set_freq(&adf4351_dev, sweep_hop_freq, false);
@@ -2577,61 +2661,14 @@ int main(void)
 	}
 
 	// show the main menu
-	main_menu();
+	menu_process(TASK_MAIN_MENU);
 
 	while (1)
 	{
 		__DSB();
 		__WFI();		// Wait For Interrupt .. we get to go to sleep here :)
 
-		switch (task_id)
-		{
-			case TASK_FREQ:
-			case TASK_FREQ_LOOP:
-				freq_set();
-				break;
-			case TASK_SWEEP_FREQ:
-			case TASK_SWEEP_FREQ_LOOP:
-				sweep_freq_set();
-				break;
-			case TASK_HOP_FREQ:
-			case TASK_HOP_FREQ_LOOP:
-				hop_freq_set();
-				break;
-			case TASK_SCAN_STEP_FREQ:
-			case TASK_SCAN_STEP_FREQ_LOOP:
-				scan_step_freq_set();
-				break;
-			case TASK_SCAN_SPEED:
-			case TASK_SCAN_SPEED_LOOP:
-				scan_speed_set();
-				break;
-			case TASK_OUTPUT_POWER:
-			case TASK_OUTPUT_POWER_LOOP:
-				output_power_set();
-				break;
-			case TASK_REF_FREQ:
-			case TASK_REF_FREQ_LOOP:
-				ref_freq_set();
-				break;
-			case TASK_REF_FREQ_ADJUST:
-			case TASK_REF_FREQ_ADJUST_LOOP:
-				ref_freq_adjust_set();
-				break;
-			case TASK_CHAN_SPACE:
-			case TASK_CHAN_SPACE_LOOP:
-				channel_spacing_set();
-				break;
-			case TASK_CHG_PUMP_CUR:
-			case TASK_CHG_PUMP_CUR_LOOP:
-				charge_pump_current_set();
-				break;
-			default: task_id = TASK_MAIN_MENU;
-			case TASK_MAIN_MENU:
-			case TASK_MAIN_MENU_LOOP:
-				main_menu();
-				break;
-		}
+		menu_process(TASK_NONE);
 
 		#ifdef USE_USB_VCP
 			process_rx_serial(&usb_rx);
@@ -2664,7 +2701,10 @@ int main(void)
 				if (sweep_hop_next)
 				{
 					sweep_hop_next = false;
-					if (eeprom.scan_step_freq > 0 && eeprom.start_freq < eeprom.end_freq && eeprom.start_freq > 0)
+					if (	eeprom.start_freq < eeprom.end_freq &&
+							eeprom.start_freq > 0 &&
+							eeprom.scan_step_freq > 0 &&
+							eeprom.scan_step_freq <= (eeprom.end_freq - eeprom.start_freq))
 					{	// compute the next frequency to jump too
 						uint64_t freq = sweep_hop_freq + eeprom.scan_step_freq;
 						if (freq < eeprom.start_freq || freq > eeprom.end_freq)
@@ -2685,7 +2725,10 @@ int main(void)
 				if (sweep_hop_next)
 				{
 					sweep_hop_next = false;
-					if (eeprom.scan_step_freq > 0 && eeprom.start_freq < eeprom.end_freq && eeprom.start_freq > 0)
+					if (	eeprom.start_freq < eeprom.end_freq &&
+							eeprom.start_freq > 0 &&
+							eeprom.scan_step_freq > 0 &&
+							eeprom.scan_step_freq <= (eeprom.end_freq - eeprom.start_freq))
 					{	// pick a random channel to jump too
 						const uint32_t num_channels = 1 + ((eeprom.end_freq - eeprom.start_freq) / eeprom.scan_step_freq);
 						while (1)
