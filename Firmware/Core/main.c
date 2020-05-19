@@ -45,7 +45,8 @@
 #define TASK_CHAN_SPACE                  8
 #define TASK_CHG_PUMP_CUR                9
 #define TASK_UNLOCK_MUTE                10
-#define TASK_MAIN_MENU                  11
+#define TASK_GCD                        11
+#define TASK_MAIN_MENU                  12
 
 // *********************************************************************
 
@@ -2142,6 +2143,77 @@ void unlock_mute_set(void)
 			eeprom.unlock_mute = unlock_mute;
 			adf4351_dev.params.mute_till_lock_enable = unlock_mute;
 			LCD_Show_CEStr(CHAR_WIDTH * 3, 3, (eeprom.unlock_mute) ? " YES " : " no ");
+
+			switch (eeprom.mode)
+			{
+				default:
+				case FREQ_MODE_SPOT:
+					adf4351_set_freq(&adf4351_dev, eeprom.frequency, false);
+					break;
+				case FREQ_MODE_SWEEP:
+				case FREQ_MODE_HOP:
+					adf4351_set_freq(&adf4351_dev, sweep_hop_freq, false);
+					break;
+			}
+		}
+
+		process_but_releases();
+	}
+}
+
+void gcd_set(void)
+{
+	bool but_pressed = false;
+	bool gcd_enable  = eeprom.gcd_enable;
+
+	if (task_id != TASK_GCD)
+	{
+		task_id = TASK_GCD;
+		OLED_Clear();
+		LCD_Show_CEStr(0, 0, "GCD");
+		LCD_Show_CEStr(CHAR_WIDTH * 3, 3, (gcd_enable) ? " YES " : " no ");
+		lcd_show_mode();
+	}
+
+	if (ok_button.released)
+	{
+		eeprom_save();
+		process_but_releases();
+		task_id = TASK_NONE;
+		return;
+	}
+
+	if (up_button.released)
+	{
+		but_pressed = true;
+		gcd_enable  = true;
+	}
+	else
+	if (down_button.released)
+	{
+		but_pressed = true;
+		gcd_enable  = false;
+	}
+
+	if (but_pressed)
+	{
+		if (eeprom.gcd_enable != gcd_enable)
+		{
+			eeprom.gcd_enable = gcd_enable;
+			adf4351_dev.params.gcd_enable = gcd_enable;
+			LCD_Show_CEStr(CHAR_WIDTH * 3, 3, (eeprom.gcd_enable) ? " YES " : " no ");
+
+			switch (eeprom.mode)
+			{
+				default:
+				case FREQ_MODE_SPOT:
+					adf4351_set_freq(&adf4351_dev, eeprom.frequency, false);
+					break;
+				case FREQ_MODE_SWEEP:
+				case FREQ_MODE_HOP:
+					adf4351_set_freq(&adf4351_dev, sweep_hop_freq, false);
+					break;
+			}
 		}
 
 		process_but_releases();
@@ -2236,6 +2308,13 @@ void lcd_show_menu(uint8_t start_info, uint8_t current_deal_info)
 			if (y_start >= max_lines * 2)
 				break;
 
+		case TASK_GCD:
+			show_mode = ((y_start / 2) == (current_deal_info - start_info)) ? 0 : 1;
+			LCD_Show_ModeCEStr(0, y_start, "GCD            ", show_mode);
+			y_start += 2;
+			if (y_start >= max_lines * 2)
+				break;
+
 		default:
 			break;
 	}
@@ -2265,6 +2344,7 @@ void menu_process(int new_menu)
 		case TASK_CHAN_SPACE:      channel_spacing_set();     break;
 		case TASK_CHG_PUMP_CUR:    charge_pump_current_set(); break;
 		case TASK_UNLOCK_MUTE:     unlock_mute_set();         break;
+		case TASK_GCD:             gcd_set();                 break;
 		default:                   task_id = TASK_NONE;
 		case TASK_NONE:
 		case TASK_MAIN_MENU:       main_menu();               break;
@@ -2347,6 +2427,7 @@ void main_menu(void)
 						case TASK_CHAN_SPACE:      channel_spacing_set();     break;
 						case TASK_CHG_PUMP_CUR:    charge_pump_current_set(); break;
 						case TASK_UNLOCK_MUTE:     unlock_mute_set();         break;
+						case TASK_GCD:             gcd_set();                 break;
 					}
 					return;
 				}

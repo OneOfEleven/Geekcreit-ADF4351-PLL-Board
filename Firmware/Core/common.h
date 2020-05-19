@@ -148,7 +148,8 @@
 		uint8_t  ref_freq_table_index;            // >= 0
 		uint8_t  charge_pump_current_table_index; // 0 to 15
 		bool     unlock_mute;							// false / true
-		uint8_t  padding[3];                      // make it a multiple of 32-bit words in size
+		bool     gcd_enable;								// false / true
+		uint8_t  padding[2];                      // make it a multiple of 32-bit words in size
 		uint16_t crc;                             // must be the last variable in the block
 	} t_eeprom;
 #pragma pack(pop)
