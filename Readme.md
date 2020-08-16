@@ -1,3 +1,2 @@
-I did this firmware because I wanted better than what the boards author did do.
+I did this firmware because I needed better than what the original author could do.
 
-G6AMU
